@@ -35,6 +35,7 @@ declare global {
         readonly FALLBACK: string;
         readonly DOH_URL: string;
         readonly kv: KVNamespace;
+        readonly EXPIRY_KV?: KVNamespace;  // اضافه شد
     }
 
     interface WarpAccount {
@@ -62,6 +63,20 @@ declare global {
         delay: string;
         applyTo: "ip" | "ipv4" | "ipv6";
         count: number;
+    }
+
+    // اضافه شد: تایپ برای تنظیمات انقضا
+    interface ExpiryUser {
+        expiryDate: string;
+        createdAt: string;
+        enabled: boolean;
+        days: number;
+    }
+
+    interface ExpirySettings {
+        enabled: boolean;
+        defaultDays: number;
+        users: Record<string, ExpiryUser>;
     }
 
     interface Settings {
@@ -138,6 +153,11 @@ declare global {
         amneziaNoiseSizeMin: number;
         amneziaNoiseSizeMax: number;
         panelVersion: string;
+        
+        // اضافه شد: تنظیمات انقضا
+        expiryEnabled: boolean;
+        expiryDays: number;
+        expiryMessage: string;
     }
 
     var settings: Settings;

@@ -68,8 +68,83 @@ export async function handlePanel(request: Request, env: Env): Promise<Response>
         case '/panel/get-warp-configs':
             return await getWarpConfigs(request, env);
 
+        // اضافه شد: API برای مدیریت انقضا
+        case '/panel/expiry-settings':
+            return await getExpirySettings(request, env);
+
+        case '/panel/set-expiry':
+            return await setExpiryForUser(request, env);
+
         default:
             return await fallback(request);
+    }
+}
+
+// اضافه شد: دریافت تنظیمات انقضا
+async function getExpirySettings(request: Request, env: Env): Promise<Response> {
+    const auth = await Authenticate(request, env);
+    if (!auth) {
+        return respond(false, HttpStatus.UNAUTHORIZED, 'Unauthorized.');
+    }
+
+    try {
+        const expiryData = await env.kv.get('expirySettings', 'json') || {
+            enabled: false,
+            defaultDays: 30,
+            users: {}
+        };
+        return respond(true, HttpStatus.OK, '', expiryData);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return respond(false, HttpStatus.INTERNAL_SERVER_ERROR, message);
+    }
+}
+
+// اضافه شد: تنظیم انقضا برای کاربر
+async function setExpiryForUser(request: Request, env: Env): Promise<Response> {
+    if (request.method !== 'POST') {
+        return respond(false, HttpStatus.METHOD_NOT_ALLOWED, 'Method not allowed.');
+    }
+
+    const auth = await Authenticate(request, env);
+    if (!auth) {
+        return respond(false, HttpStatus.UNAUTHORIZED, 'Unauthorized.');
+    }
+
+    try {
+        const { userId, days, enabled } = await request.json();
+        
+        // دریافت تنظیمات فعلی
+        const expiryData = await env.kv.get('expirySettings', 'json') || {
+            enabled: false,
+            defaultDays: 30,
+            users: {}
+        };
+
+        if (!expiryData.users) {
+            expiryData.users = {};
+        }
+
+        if (enabled && days > 0) {
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + days);
+            
+            expiryData.users[userId] = {
+                expiryDate: expiryDate.toISOString(),
+                createdAt: new Date().toISOString(),
+                enabled: true,
+                days: days
+            };
+        } else {
+            // حذف کاربر از لیست انقضا
+            delete expiryData.users[userId];
+        }
+
+        await env.kv.put('expirySettings', JSON.stringify(expiryData));
+        return respond(true, HttpStatus.OK, '', expiryData);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return respond(false, HttpStatus.INTERNAL_SERVER_ERROR, message);
     }
 }
 
@@ -145,7 +220,7 @@ export async function handleSubscriptions(request: Request, env: Env): Promise<R
         case `/sub/normal/${subPath}`:
             switch (client) {
                 case 'xray':
-                    return await getXrCustomConfigs(false);
+                    return await getXrCustomConfigs(env, false); // تغییر: اضافه کردن env
 
                 case 'sing-box':
                     return await getSbCustomConfig(false);
@@ -170,7 +245,7 @@ export async function handleSubscriptions(request: Request, env: Env): Promise<R
         case `/sub/fragment/${subPath}`:
             switch (client) {
                 case 'xray':
-                    return await getXrCustomConfigs(true);
+                    return await getXrCustomConfigs(env, true); // تغییر: اضافه کردن env
 
                 case 'sing-box':
                     return await getSbCustomConfig(true);

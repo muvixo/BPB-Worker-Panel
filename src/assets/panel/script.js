@@ -34,6 +34,9 @@ fetch('/panel/settings')
         const { subPath, proxySettings } = body;
         globalThis.subPath = encodeURIComponent(subPath);
         initiatePanel(proxySettings);
+        
+        // ===== بارگذاری تنظیمات انقضا =====
+        loadExpirySettings();
     })
     .catch(error => console.error("Data query error:", error.message || error))
     .finally(() => {
@@ -57,12 +60,106 @@ fetch('/panel/settings')
         });
     });
 
+// ===== توابع مدیریت انقضا =====
+async function loadExpirySettings() {
+    try {
+        const response = await fetch('/panel/expiry-settings');
+        const { success, body } = await response.json();
+        
+        if (success && body) {
+            document.getElementById('expiryEnabled').value = body.enabled ? 'true' : 'false';
+            document.getElementById('expiryDays').value = body.defaultDays || 30;
+            document.getElementById('expiryMessage').value = body.expiryMessage || '⏰ This configuration has expired.';
+            
+            toggleExpirySettings();
+            updateExpiryStatus();
+            
+            // پر کردن لیست کاربران
+            const userSelect = document.getElementById('expiryUserList');
+            userSelect.innerHTML = '<option value="default">Default User</option>';
+            
+            if (body.users) {
+                Object.keys(body.users).forEach(userId => {
+                    if (userId !== 'default') {
+                        const option = document.createElement('option');
+                        option.value = userId;
+                        option.textContent = userId;
+                        userSelect.appendChild(option);
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading expiry settings:', error);
+    }
+}
+
+function toggleExpirySettings() {
+    const enabled = document.getElementById('expiryEnabled').value === 'true';
+    const section = document.getElementById('expirySettingsSection');
+    section.style.display = enabled ? 'block' : 'none';
+}
+
+function loadUserExpiry() {
+    const userId = document.getElementById('expiryUserList').value;
+    // اینجا می‌تونید اطلاعات کاربر رو از سرور بگیرید
+    // فعلاً پیش‌فرض می‌ذاریم
+    document.getElementById('expiryUserDays').value = 30;
+}
+
+async function setUserExpiry() {
+    const userId = document.getElementById('expiryUserList').value;
+    const days = parseInt(document.getElementById('expiryUserDays').value);
+    const enabled = days > 0;
+
+    try {
+        const response = await fetch('/panel/set-expiry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, days, enabled })
+        });
+        
+        const { success, message } = await response.json();
+        if (success) {
+            alert(`✅ Expiry set for ${userId}: ${days} days`);
+            updateExpiryStatus();
+        } else {
+            alert(`❌ Error: ${message}`);
+        }
+    } catch (error) {
+        console.error('Error setting expiry:', error);
+        alert('❌ Failed to set expiry');
+    }
+}
+
+async function updateExpiryStatus() {
+    try {
+        const response = await fetch('/panel/expiry-settings');
+        const { success, body } = await response.json();
+        
+        if (success) {
+            const statusDiv = document.getElementById('expiryStatus');
+            if (body.enabled) {
+                const userCount = Object.keys(body.users || {}).length;
+                statusDiv.innerHTML = `✅ Expiry enabled<br>Default: ${body.defaultDays} days<br>Users: ${userCount}`;
+            } else {
+                statusDiv.innerHTML = '⏸️ Expiry is disabled';
+            }
+        }
+    } catch (error) {
+        console.error('Error updating expiry status:', error);
+    }
+}
+
 function initiatePanel(proxySettings) {
     const {
         VLConfigs,
         TRConfigs,
         ports,
-        xrayUdpNoises
+        xrayUdpNoises,
+        expiryEnabled,
+        expiryDays,
+        expiryMessage
     } = proxySettings;
 
     Object.assign(globalThis, {

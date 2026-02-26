@@ -450,6 +450,66 @@
                     </div>
                 </div>
             </details>
+
+            <!-- ===== بخش جدید: Expiry Management ===== -->
+            <details>
+                <summary>
+                    <h3>⏰ Expiry Management
+                        <a href="#" target="_blank" title="Help">
+                            <span class="material-symbols-rounded">info</span>
+                        </a>
+                    </h3>
+                </summary>
+                <div class="section">
+                    <div class="form-control">
+                        <label for="expiryEnabled">🔛 Enable Expiry</label>
+                        <div>
+                            <select id="expiryEnabled" name="expiryEnabled" onchange="toggleExpirySettings()">
+                                <option value="false">Disabled</option>
+                                <option value="true">Enabled</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="expirySettingsSection" style="display: none;">
+                        <div class="form-control">
+                            <label for="expiryDays">📅 Default Days</label>
+                            <div>
+                                <input type="number" id="expiryDays" name="expiryDays" min="1" max="365" value="30">
+                            </div>
+                        </div>
+                        <div class="form-control">
+                            <label for="expiryMessage">💬 Expiry Message</label>
+                            <div>
+                                <input type="text" id="expiryMessage" name="expiryMessage" value="⏰ This configuration has expired.">
+                            </div>
+                        </div>
+                        <div class="form-control">
+                            <label for="expiryUserList">👥 Users</label>
+                            <div>
+                                <select id="expiryUserList" name="expiryUserList" onchange="loadUserExpiry()">
+                                    <option value="default">Default User</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-control">
+                            <label for="expiryUserDays">📅 User Days</label>
+                            <div class="min-max">
+                                <input type="number" id="expiryUserDays" name="expiryUserDays" min="1" max="365" value="30">
+                                <button type="button" class="button small" onclick="setUserExpiry()">Set</button>
+                            </div>
+                        </div>
+                        <div class="form-control">
+                            <label for="expiryStatus">📊 Status</label>
+                            <div>
+                                <div id="expiryStatus" class="output-container">
+                                    Expiry is disabled
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
             <details>
                 <summary>
                     <h3>Routing Rules

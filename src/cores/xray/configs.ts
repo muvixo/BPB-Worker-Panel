@@ -20,6 +20,37 @@ import {
     toRange
 } from '@utils';
 
+// ===== اضافه شد: تابع بررسی انقضا =====
+async function isUserExpired(env: Env, userId: string = 'default'): Promise<{ expired: boolean, message?: string }> {
+    try {
+        const settings = globalThis.settings;
+        if (!settings.expiryEnabled) {
+            return { expired: false };
+        }
+
+        const expiryData = await env.kv.get('expirySettings', 'json') as any;
+        if (!expiryData?.users?.[userId]) {
+            return { expired: false };
+        }
+
+        const userData = expiryData.users[userId];
+        const now = new Date();
+        const expiry = new Date(userData.expiryDate);
+
+        if (now > expiry) {
+            return { 
+                expired: true, 
+                message: settings.expiryMessage || '⏰ This configuration has expired.' 
+            };
+        }
+
+        return { expired: false };
+    } catch (error) {
+        console.error('Error checking expiry:', error);
+        return { expired: false };
+    }
+}
+
 function buildBalancer(tag: string, selector: string, hasFallback: boolean): Balancer {
     return {
         tag,
@@ -137,7 +168,8 @@ async function addBestPingConfigs(
     totalAddresses: string[],
     proxyOutbounds: Outbound[],
     chainOutbounds: Outbound[],
-    isFragment: boolean
+    isFragment: boolean,
+    env: Env  // اضافه شد
 ) {
     const isChain = !!chainOutbounds.length;
     const chainSign = isChain ? '🔗 ' : '';
@@ -153,10 +185,17 @@ async function addBestPingConfigs(
         outbounds.push(fragmentOutbound);
     }
 
+    // بررسی انقضا
+    const expired = await isUserExpired(env);
+    if (expired.expired) {
+        // اگر منقضی شده، کانفیگ اضافه نکن
+        return;
+    }
+
     const config = await buildConfig(remark, outbounds, true, isChain, true, false, false, totalAddresses);
 
     if (isChain) {
-        await addBestPingConfigs(configs, totalAddresses, proxyOutbounds, [], isFragment);
+        await addBestPingConfigs(configs, totalAddresses, proxyOutbounds, [], isFragment, env);
     }
 
     configs.push(config);
@@ -165,12 +204,19 @@ async function addBestPingConfigs(
 async function addBestFragmentConfigs(
     configs: Config[],
     outbound: Outbound,
+    env: Env,  // اضافه شد
     chainProxy?: Outbound
 ) {
     const {
         httpConfig: { hostName },
         settings: { fragmentIntervalMin, fragmentIntervalMax }
     } = globalThis;
+
+    // بررسی انقضا
+    const expired = await isUserExpired(env);
+    if (expired.expired) {
+        return;
+    }
 
     const isChain = !!chainProxy;
     const outbounds: Outbound[] = [];
@@ -208,13 +254,19 @@ async function addBestFragmentConfigs(
     );
 
     if (chainProxy) {
-        await addBestFragmentConfigs(configs, outbound);
+        await addBestFragmentConfigs(configs, outbound, env);
     }
 
     configs.push(config);
 }
 
-async function addWorkerlessConfigs(configs: Config[]) {
+async function addWorkerlessConfigs(configs: Config[], env: Env) {  // env اضافه شد
+    // بررسی انقضا
+    const expired = await isUserExpired(env);
+    if (expired.expired) {
+        return;
+    }
+
     const tlsFragment = buildFreedomOutbound(true, false, 'proxy');
     const udpNoise = buildFreedomOutbound(false, true, 'udp-noise');
     const httpFragment = buildFreedomOutbound(true, false, 'http-fragment', undefined, undefined, '1-1');
@@ -255,8 +307,21 @@ async function addWorkerlessConfigs(configs: Config[]) {
     configs.push(cfDnsConfig, googleDnsConfig);
 }
 
-export async function getXrCustomConfigs(isFragment: boolean): Promise<Response> {
+export async function getXrCustomConfigs(env: Env, isFragment: boolean): Promise<Response> {  // env اضافه شد
     const { outProxy, ports } = globalThis.settings;
+
+    // ===== بررسی انقضا =====
+    const expired = await isUserExpired(env);
+    if (expired.expired) {
+        return new Response(JSON.stringify({
+            error: true,
+            message: expired.message
+        }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
     const chainProxy = outProxy ? buildChainOutbound() : undefined;
 
     const Addresses = await getConfigAddresses(isFragment);
@@ -298,11 +363,11 @@ export async function getXrCustomConfigs(isFragment: boolean): Promise<Response>
         }
     }
 
-    await addBestPingConfigs(configs, Addresses, proxies, chains, isFragment);
+    await addBestPingConfigs(configs, Addresses, proxies, chains, isFragment, env);
 
     if (isFragment) {
-        await addBestFragmentConfigs(configs, proxies[0], chainProxy);
-        await addWorkerlessConfigs(configs);
+        await addBestFragmentConfigs(configs, proxies[0], env, chainProxy);
+        await addWorkerlessConfigs(configs, env);
     }
 
     return new Response(JSON.stringify(configs, null, 4), {
@@ -322,6 +387,19 @@ export async function getXrWarpConfigs(
     isKnocker: boolean
 ): Promise<Response> {
     const { warpEndpoints } = globalThis.settings;
+
+    // ===== بررسی انقضا برای Warp =====
+    const expired = await isUserExpired(env);
+    if (expired.expired) {
+        return new Response(JSON.stringify({
+            error: true,
+            message: expired.message
+        }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
     const { warpAccounts } = await getDataset(request, env);
 
     const proIndicator = isPro ? ' Pro ' : ' ';
